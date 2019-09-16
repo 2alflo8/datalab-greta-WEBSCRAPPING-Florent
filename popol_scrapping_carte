@@ -1,0 +1,372 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Sep  2 13:27:39 2019
+
+@author: alflo
+"""
+
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Aug 30 12:10:05 2019
+
+@author: alflo
+"""
+#from urllib3 import urlopen
+from urllib.request import urlopen
+import bs4 as BeautifulSoup
+import re
+import pandas as pd
+from geopy.geocoders import Nominatim
+import folium
+
+#######creation data frame de collecte########
+
+df_collecte= pd.DataFrame()
+df_collecte = pd.DataFrame(columns =["intitulé", "lien_offre","type","contrat","durée",
+                                     "temps de travail","localite","salaire",
+                                     "site recruteur","date actualisé","reference",
+                                     "contact mail","contact personne","experience",
+                                     "site partenaire"])
+i=1
+########création de liste de recherche lieux et metier######  
+
+liste_lieux=["24R","53R"]
+liste_metier=["data","developpeur","python"]
+
+########double boucle pour implémenter les critéres des listes ######
+
+for l in range(len(liste_lieux)):
+    lieux=liste_lieux[l]
+    for m in range(len(liste_metier)):
+        #print(liste_metier)
+        mot_cle=liste_metier[m]
+        #print(mot_cle)
+        html='https://candidat.pole-emploi.fr/offres/recherche?lieux={}&motsCles={}&offresPartenaires=true&range=0-9&rayon=10&tri=0'.format(lieux,mot_cle)
+        #print("adresse >>> ",html)
+
+########sortir tous les url des offres si + de 10 par page ########## 
+        
+        html = urlopen(html).read()
+        html = BeautifulSoup.BeautifulSoup(html,features = "lxml")
+        
+########extraction du nb offres #########  
+        
+        nb_offre=html.find_all("h1", class_="title")
+        #print(">>>",nb_offre)
+        nb_offre=nb_offre[0].text
+        #print(">>>>",nb_offre) 
+        nb_offre=re.findall(r'\d+',nb_offre)
+        nb_offre=int(nb_offre[0])
+        #print("nb_offre >>>> ",nb_offre,type(nb_offre))
+        
+        c=1
+        
+        if nb_offre<=10:
+            offre="{}-{}".format(0,nb_offre)                   
+            html='https://candidat.pole-emploi.fr/offres/recherche?lieux={}&motsCles={}&offresPartenaires=true&range={}&rayon=10&tri=0'.format(lieux,mot_cle,offre)
+            #print(html)
+        else:
+            z=nb_offre//100
+                
+            for tour in range(z+1):
+                #print("tour >>> ",tour)
+                offre="{}-{}".format(((tour+1)*100)-100,(tour+1)*100)
+                if tour==z:
+                    offre="{}-{}".format(((tour+1)*100)-100,nb_offre)
+                html='https://candidat.pole-emploi.fr/offres/recherche?lieux={}&motsCles={}&offresPartenaires=true&range={}&rayon=10&tri=0'.format(lieux,mot_cle,offre)       
+                print(html)
+
+
+        ########création de la soupe ########## 
+                
+                html = urlopen(html).read()
+                soup = BeautifulSoup.BeautifulSoup(html,features = "lxml")
+                #print(soup)
+                nb_offres=0
+               
+                
+                for adresse_offre in soup.find_all("h2",attrs={"class":"media-heading"}):
+                    #print("adresse_annonce >>>" ,adresse_offre)
+                    nb_offres+=1
+                    #print("OFFRE BRUT >>>> ",adresse_offre)
+                    
+        #######extraction de l'intitule#######
+                    
+                    intitule=adresse_offre.text.replace('\n', '')
+                    
+        
+        #########extraction de l'url de l'offre########
+                    
+                    #___________version regex______
+                    #print("INTITULE >>>> ",intitule)
+                    #ad=re. findall('(\/[\w]+\/[\w]+\/[\w]+\/[\w]+)',str(adresse_offre))
+                    #offre_emploi='https://candidat.pole-emploi.fr{}'.format(ad[0])
+                    #print("URL offre >>> ",offre_emploi)
+                    
+                    lien_offre="https://candidat.pole-emploi.fr{}".format(adresse_offre.find('a', class_ ='btn-reset')['href'])
+                    #print("LIEN OFFRE >>> ",lien_offre)
+                    
+                    lien=lien_offre
+                    
+        ############soupe de l'annonce########            
+                    
+                    lien = urlopen(lien).read()
+                    soup = BeautifulSoup.BeautifulSoup(lien,features = "lxml")
+                    
+        #####dans l'offre extraction et separation du type du contrat et de la durée #########
+                    
+                                
+                    type_contrat=soup.find_all("dd")
+                    type_contrat=type_contrat[0].text
+                    type_contrat=type_contrat.replace('\n',"-")
+                    type_contrat=type_contrat.replace('--',"/")
+                    type_contrat=type_contrat.replace('-',"")
+                    type_contrat=type_contrat.split("/")                
+                    contrat=type_contrat[0]
+                    type_=type_contrat[1]
+                    
+                    try:
+                        contrat=contrat.split("  ")
+                        duree=contrat[1]
+                        contrat=str(contrat[0])
+                        
+                        print(duree)
+                    except:
+                        duree=""
+                        contrat=type_contrat[0]
+                    
+                        print("contrat >>>> ",contrat ,"type_ >>>> ",type_)
+                    
+        ##########dans l'offre extraction temps hebdomadaire#####
+                                
+                    try:
+                        a=soup.find_all("dd",itemprop="workHours")
+                        #print(">>>",a)
+                        temps_hebdo=a[0].text
+                        #print(temps_hebdo)
+                    except:
+                        temps_hebdo=""
+                        #print(temps_hebdo)
+                        
+        ###########dans l'offre extraction du salaire########
+                        
+                        
+                    try:
+                        r=soup.find_all("dd")
+                        liste_html=""
+                        for x in r:
+                            liste_html+=str(x)
+                        id_salaire=(liste_html.index("Salaire"))+len("Salaire :")
+                        id_dd=liste_html.index("</dd><dd><a")
+                        salaire=liste_html[id_salaire:id_dd]
+                        salaire=re.findall('[\w]+',salaire)
+                        salaire=" ".join(salaire)
+                        print("$$$$$alaire>>>>",salaire)
+                    except:
+                        salaire=""
+                        
+                        
+        
+        ##########dans l'offre extraction dept-ville#####
+                        
+                    dept_ville=soup.find_all("span", itemprop="name")
+                    print("2>>>",dept_ville)
+                    dept_ville=dept_ville[0].text
+                    print(">>>>",dept_ville) 
+                    
+        ###########dans l'offre extraction du site du recruteur#########
+        
+                    try:
+                        site_recruteur=soup.find("a",class_='text-link')['href']
+                        print("site recruteur>>>",site_recruteur) 
+                        
+                        liste_contact=site_recruteur.split("/")
+                        print(liste_contact)
+                        
+                        if "offres"  in liste_contact:
+                            print(">>> offres") 
+                            site_recruteur=""
+                      
+                                  
+                    except:
+                        site_recruteur=""
+                    
+        ###########dans l'offre extraction de la date d'actualisation au format XXXX-XX-XX ######
+                        
+                    date=soup.find_all("span",itemprop="datePosted")
+                    print(date)
+                    date_actualise=re.findall("([\d]{4}-[\d]{2}-[\d]{2})",str(date))
+                    date_actualise=date_actualise[0]
+                    print("date >>>> ",date_actualise)
+        
+        #########dans l'offre extraction de la référence ###########            
+                    
+                    reference=soup.find_all("span",itemprop="value")
+                    reference=reference[0].text 
+                    print("reference >>>> ",reference)
+        
+        ###########extraction  des contacts personne et mail ########
+        
+                    try:
+                        a=soup.find_all("div",class_="apply-block")
+                        a=(a[0].text)
+                        a=str(a)
+                        a=a.replace("Adresse électronique","")
+                        a = a.split()
+                                  
+                        contact=a[1:-2]
+                        contact_mail=a[-1]
+                        print(">>>> ",contact_mail)
+                        contact_personne=" ".join( contact )
+                        print(">>>> ",contact_personne)
+                    except:
+                        contact_mail=""
+                        contact_personne=""
+        
+        ############extraction de l'experience##########
+                        
+                    a=soup.find_all("span",itemprop="experienceRequirements")
+                    experience=(a[0].text)
+                    print("experience >>>> ",experience) 
+                    
+        ############extraction du site de l'employeur en bas######
+        
+                    try:
+                        a=soup.find_all("div", class_="media")
+                        a=(a[0].text)
+                        a=str(a)
+                        a = a.split()
+                        id_site=a.index('internet')
+                        site_recruteur=a[id_site+1]
+                        #id_site=site_recruteur
+                        print(id_site)            
+                    except:
+                        #site_recruteur=""
+                        id_site=""
+                        
+        ############extraction du site du partenaire #######
+        
+                    try:
+                        a=soup.find("ul", class_="partner-list"),["href"]               
+                        a=list(a)                
+                        a=a[0]
+                        a=str(a)                
+                        a=a.replace("href=","href= ")
+                        a=a.split()             
+                        id_site=a.index("href=")
+                        id_partenaire=a[id_site+1]
+                        id_partenaire=re.sub('["^\"","$\""]',"",id_partenaire)
+                        print(id_partenaire)
+                        #id_site=id_partenaire
+                    except: 
+                        id_partenaire=""
+                        #id_site:""
+                       
+        #########remplissage de la data frame df_collecte####### 
+                    
+                    df_collecte.loc[i] = [intitule, lien_offre,type_,contrat,duree,temps_hebdo,
+                                   dept_ville,salaire,site_recruteur,date_actualise,
+                                   reference,contact_mail,contact_personne,experience,
+                                   id_partenaire]
+                    
+        
+        
+                    
+        #########comptage des offres#####            
+                    
+                    i+=1
+        print("nb_offres>>>>",i)            
+            
+            
+#########creation de la carte########
+
+popop=pd.DataFrame(columns =["intitulé_url","intitulé"])    
+carte_popol = folium.Map([47.9, 1.9], zoom_start=8)
+
+#########import du csv#################
+
+df_popol=pd.read_csv("/home/alflo/Bureau/popol/pole_emploi.csv")
+#print("1>>> ",type(df_popol))
+
+##########creons la collonne url_annonce en html pour le popup########
+
+df_popol["url_annonce"]="" 
+ind_1=(df_popol.columns.get_loc("lien_offre"))
+ind_2=(df_popol.columns.get_loc("intitulé"))
+ind_3=(df_popol.columns.get_loc("url_annonce"))
+print("ind_1 >>> ",ind_1 ,"ind_2 >>> ",ind_2,"ind_3 >>> ",ind_3)
+nb_lien=len(df_popol[["lien_offre"]])
+
+i=0
+    
+for loop in range(nb_lien):   
+    info_1=df_popol.iloc[i][ind_1]
+    info_2=df_popol.iloc[i][ind_2]
+    popup_info=(' <a href= {} target="_blank"> {} </a> '.format(info_1,info_2))
+    df_popol["url_annonce"][i]=popup_info 
+    
+ 
+    i+=1
+    
+##########enlevons les doublons en utilisant les ref poles emploi##############
+
+df_popol. drop_duplicates ([ "intitulé" ], keep = 'last' )
+
+
+
+
+#######extrayons les nom des localites par groupe#########
+
+a=df_popol.iloc[0]
+#print(">>>>> ",a)
+
+index_localite=(df_popol.columns.get_loc('localite'))
+localite=(df_popol.groupby('localite').size())
+#b=df_popol.iloc[:5,7]
+print(">>>>> ",index_localite)
+
+i=0    
+#print("nb_ville >>>> ",len(localite))
+for loop in range(len(localite)):
+    
+#########separons les noms des communes du nb d'annonce########
+        
+    ville_f=(localite.index[i]+" FRANCE")
+    print("ville>>>>>",ville_f)    
+    nb_annonce=localite.iloc[i],[0]
+    nb_annonce=nb_annonce[0]
+    print("nb_annonce>>> ",nb_annonce)
+         
+#########transformons adresse en coordonnée #######
+    
+          
+    
+    geolocator = Nominatim(user_agent="popol")
+    location = geolocator.geocode(ville_f)
+    print(location.address)
+    coordonne=[location.latitude,location.longitude]
+    print(coordonne)
+       
+############extrayons les intitules et les liens pour le popup #######   
+        
+    
+    ville=localite.index[i] 
+    offre_lien=list(df_popol.loc[df_popol["localite"]==ville,"url_annonce"])
+    offre_lien="<br/>".join(offre_lien)
+   
+        
+########positionnons une punaise avec tout les liens d'annonces de la commune##########
+        
+            
+    folium.Marker(location=[coordonne[0],coordonne[1]],
+    icon=folium.Icon(icon='cloud', color="green"),
+    popup = folium.Popup(offre_lien,max_width=350,min_width=350),    
+    tooltip="il y à {}  offres sur {}".format(nb_annonce,ville)).add_to(carte_popol)
+    carte_popol.save('/home/alflo/Documents/carte_popol.html')
+
+    i+=1                    
+            
+            
+            
