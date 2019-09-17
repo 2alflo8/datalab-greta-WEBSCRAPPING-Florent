@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Sep 13 13:38:52 2019
+
+@author: alflo
+"""
+
+
+
+
+from geopy.geocoders import Nominatim
+import pandas as pd
+import folium
+
+
+
+
+#########creation de la carte########
+
+popop=pd.DataFrame(columns =["intitulé_url","intitulé"])    
+carte_popol = folium.Map([47.9, 1.9], zoom_start=8)
+
+#########import du csv#################
+
+df_popol=pd.read_csv("/home/alflo/Bureau/popol/pole_emploi.csv")
+df_popol. drop_duplicates ([ "intitulé" ], keep = 'last' )
+#print("1>>> ",type(df_popol))
+
+##########creons la collonne url_annonce en html pour le popup########
+
+df_popol["url_annonce"]="" 
+ind_1=(df_popol.columns.get_loc("lien_offre"))
+ind_2=(df_popol.columns.get_loc("intitulé"))
+ind_3=(df_popol.columns.get_loc("url_annonce"))
+print("ind_1 >>> ",ind_1 ,"ind_2 >>> ",ind_2,"ind_3 >>> ",ind_3)
+nb_lien=len(df_popol[["lien_offre"]])
+
+i=0
+    
+for loop in range(nb_lien):   
+    info_1=df_popol.iloc[i][ind_1]
+    info_2=df_popol.iloc[i][ind_2]
+    popup_info=(' <a href= {} target="_blank"> {} </a> '.format(info_1,info_2))
+    df_popol["url_annonce"][i]=popup_info 
+    
+ 
+    i+=1
+
+#######extrayons les nom des localites par groupe#########
+
+a=df_popol.iloc[0]
+#print(">>>>> ",a)
+
+index_localite=(df_popol.columns.get_loc('localite'))
+localite=(df_popol.groupby('localite').size())
+#b=df_popol.iloc[:5,7]
+print(">>>>> ",index_localite)
+
+i=0    
+#print("nb_ville >>>> ",len(localite))
+for loop in range(len(localite)):
+    
+#########separons les noms des communes du nb d'annonce########
+        
+    ville_f=(localite.index[i]+" FRANCE")
+    print("ville>>>>>",ville_f)    
+    nb_annonce=localite.iloc[i],[0]
+    nb_annonce=nb_annonce[0]
+    print("nb_annonce>>> ",nb_annonce)
+         
+#########transformons adresse en coordonnée #######
+    
+          
+    
+    geolocator = Nominatim(user_agent="popol")
+    location = geolocator.geocode(ville_f)
+    print(location.address)
+    coordonne=[location.latitude,location.longitude]
+    print(coordonne)
+       
+############extrayons les intitules et les liens pour le popup #######   
+        
+    
+    ville=localite.index[i] 
+    offre_lien=list(df_popol.loc[df_popol["localite"]==ville,"url_annonce"])
+    offre_lien="<br/>".join(offre_lien)
+   
+        
+########positionnons une punaise avec tout les liens d'annonces de la commune##########
+        
+            
+    folium.Marker(location=[coordonne[0],coordonne[1]],
+    icon=folium.Icon(icon='cloud', color="green"),
+    popup = folium.Popup(offre_lien,max_width=350,min_width=350),    
+    tooltip="il y à {}  offres sur {}".format(nb_annonce,ville)).add_to(carte_popol)
+    carte_popol.save('/home/alflo/Documents/carte_popol.html')
+
+    i+=1        
+
+        
+#####################################################
+
+
+
+
+
+
+    
